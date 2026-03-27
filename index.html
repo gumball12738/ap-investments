@@ -724,12 +724,14 @@ async function loadChart(range, btn) {
       return d.toLocaleDateString('en-GB', {month:'short',year:'2-digit'});
     });
 
-    // Normalise each series to % change from its first point
+    // Build timestamp lookup for each series, normalise to % change
     const datasets = valid.map(s => {
       const first = s.points[0].v;
-      const data = base.points.map((_, i) => {
-        const pt = s.points[i];
-        return pt ? +((pt.v - first) / first * 100).toFixed(3) : null;
+      const lookup = {};
+      s.points.forEach(p => { lookup[p.t] = p.v; });
+      const data = base.points.map(p => {
+        const v = lookup[p.t];
+        return v != null ? +((v - first) / first * 100).toFixed(3) : null;
       });
       return { label:s.label, data, borderColor:s.color, backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:0.3, spanGaps:true };
     });
