@@ -704,12 +704,12 @@ async function loadChart(range, btn) {
 
   const allSyms = [...LINE_SYMS, ...extraSyms];
   try {
-    const results = await Promise.all(allSyms.map(s =>
-      fetch(`/api/analyse?type=chart&ticker=${encodeURIComponent(s.sym)}&range=${range}`)
-        .then(r => r.json())
-        .then(d => ({ ...s, points: d.points || [] }))
-        .catch(() => ({ ...s, points: [] }))
-    ));
+    // Batch all tickers in one API call (sequential server-side to avoid rate limiting)
+    const symsStr = allSyms.map(s => s.sym).join(',');
+    const batchResp = await fetch(`/api/analyse?type=chart&tickers=${encodeURIComponent(symsStr)}&range=${range}`);
+    if (!batchResp.ok) throw new Error(`API error ${batchResp.status}`);
+    const batchData = await batchResp.json();
+    const results = allSyms.map((s, i) => ({ ...s, points: batchData[i]?.points || [] }));
 
     const valid = results.filter(r => r.points.length > 0);
     if (!valid.length) { msg.textContent = 'No data available'; return; }

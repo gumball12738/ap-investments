@@ -31,7 +31,7 @@ export default async function handler(req, res) {
 
   const { type } = req.query;
 
-  // GET quote → live prices for banner (using v8 chart for reliability)
+  // GET quote → live prices for banner
   if (type === 'quote') {
     try {
       const syms = (req.query.symbols || '^GSPC,^IXIC,EQGB.L,VUAG.L,SEMI.L,VWRP.L,JREM.L').split(',').map(s => s.trim());
@@ -40,15 +40,27 @@ export default async function handler(req, res) {
           const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`, { headers: H });
           if (!r.ok) return null;
           const d = await r.json();
-          const meta = d?.chart?.result?.[0]?.meta;
+          const result = d?.chart?.result?.[0];
+          const meta = result?.meta;
           if (!meta) return null;
+          const price = meta.regularMarketPrice;
+          const prev = meta.chartPreviousClose || meta.previousClose;
+          // Get last two daily closes to compute change if meta doesn't have it
+          const closes = result?.indicators?.quote?.[0]?.close || [];
+          const validCloses = closes.filter(v => v != null);
+          let changePct = null;
+          if (price && prev) {
+            changePct = (price - prev) / prev * 100;
+          } else if (validCloses.length >= 2) {
+            const last = validCloses[validCloses.length - 1];
+            const prev2 = validCloses[validCloses.length - 2];
+            changePct = (last - prev2) / prev2 * 100;
+          }
           return {
             symbol: sym,
             name: meta.longName || meta.shortName || sym,
-            price: meta.regularMarketPrice,
-            changePct: meta.regularMarketPrice && meta.previousClose
-              ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100)
-              : null,
+            price,
+            changePct,
             currency: meta.currency
           };
         } catch { return null; }
