@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Analyst Upside Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#030810;min-height:100vh;font-family:'Courier New',monospace;color:#c8d8e8}
+::-webkit-scrollbar{width:3px;background:#030810}
+::-webkit-scrollbar-thumb{background:#0d1e2d;border-radius:2px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.row:hover{background:#0a1825!important}
+.filter-btn:hover{opacity:0.8}
+input:focus,select:focus{outline:none!important;border-color:#1a3040!important}
+@media(max-width:580px){.hide-sm{display:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useMemo}=React;
+
+const ALL_STOCKS=[
+  {ticker:"TCRX",name:"TScan Therapeutics",sector:"Biotech",current:1.80,target:10.00,analysts:6,rating:"Strong Buy",tier:1,risk:"Extreme",note:"Cell therapy pipeline, Phase 1 ALLOHA trial Q2 2026",source:"Wedbush"},
+  {ticker:"NUVB",name:"Nuvation Bio",sector:"Oncology",current:4.50,target:12.00,analysts:8,rating:"Strong Buy",tier:1,risk:"Extreme",note:"IBTROZI commercial launch, 90%+ analysts bullish",source:"RBC Capital"},
+  {ticker:"RGTI",name:"Rigetti Computing",sector:"Quantum",current:16.60,target:40.30,analysts:5,rating:"Hold",tier:1,risk:"Extreme",note:"Quantum computing, pre-revenue speculative play",source:"Zacks"},
+  {ticker:"IONQ",name:"IonQ",sector:"Quantum",current:33.40,target:74.89,analysts:8,rating:"Buy",tier:1,risk:"Extreme",note:"$72B quantum market by 2035, market cap ~$10B",source:"TipRanks avg"},
+  {ticker:"QBTS",name:"D-Wave Quantum",sector:"Quantum",current:19.38,target:40.37,analysts:4,rating:"Hold",tier:1,risk:"Extreme",note:"Commercial quantum annealing systems",source:"Zacks"},
+  {ticker:"SOUN",name:"SoundHound AI",sector:"Voice AI",current:7.50,target:16.31,analysts:10,rating:"Buy",tier:1,risk:"Extreme",note:"Voice AI + drive-thru automation, rev +67%",source:"Yahoo Finance avg"},
+  {ticker:"OCS",name:"Oculis Pharma",sector:"Ophthalmology",current:20.97,target:42.63,analysts:8,rating:"Strong Buy",tier:2,risk:"High",note:"Eye disorder pipeline, JPMorgan Overweight $38",source:"JPMorgan"},
+  {ticker:"TTD",name:"The Trade Desk",sector:"Ad Tech",current:24.15,target:46.66,analysts:34,rating:"Buy",tier:2,risk:"High",note:"Down 70% from ATH, CEO bought $148M of stock personally",source:"34 analysts"},
+  {ticker:"MSFT",name:"Microsoft",sector:"Cloud/AI",current:374,target:593,analysts:53,rating:"Strong Buy",tier:2,risk:"Medium",note:"31% off ATH, Azure re-rating play, 53/53 analysts bullish",source:"Wedbush $730 high"},
+  {ticker:"JAZZ",name:"Jazz Pharma",sector:"Biopharma",current:180,target:275,analysts:11,rating:"Strong Buy",tier:2,risk:"High",note:"Oncology data at AACR 2026, profit margin 17%",source:"BofA"},
+  {ticker:"NBIS",name:"Nebius Group",sector:"AI Infra",current:97,target:144.70,analysts:6,rating:"Buy",tier:2,risk:"High",note:"AI infrastructure, ARR target $7-9B by 2026",source:"Consensus"},
+  {ticker:"DDOG",name:"Datadog",sector:"Cloud/Security",current:108,target:162,analysts:40,rating:"Moderate Buy",tier:2,risk:"Medium",note:"40 bullish Q4 upgrades, security + AI expansion",source:"MarketBeat"},
+  {ticker:"NVDA",name:"NVIDIA",sector:"Semiconductors",current:179,target:269,analysts:41,rating:"Strong Buy",tier:3,risk:"Medium",note:"AI infrastructure king, Jensen sees $3T market by 2030",source:"Morgan Stanley"},
+  {ticker:"AMZN",name:"Amazon",sector:"Cloud/E-com",current:207,target:296,analysts:46,rating:"Strong Buy",tier:3,risk:"Medium",note:"AWS growing 20%+, highest buy consensus ratio",source:"RBC $300"},
+  {ticker:"AVGO",name:"Broadcom",sector:"Semiconductors",current:321,target:455,analysts:29,rating:"Strong Buy",tier:3,risk:"Medium",note:"AI revenue doubled to $8.4B, custom silicon moat",source:"Goldman $450"},
+  {ticker:"MU",name:"Micron",sector:"Memory",current:345,target:443,analysts:30,rating:"Strong Buy",tier:3,risk:"Medium",note:"Forward P/E 12, demand outstrips supply through 2030",source:"Rosenblatt $500"},
+  {ticker:"LULU",name:"Lululemon",sector:"Retail",current:162,target:191,analysts:26,rating:"Hold",tier:3,risk:"Medium",note:"Down 50% from ATH, new CEO, China growing",source:"Consensus"},
+  {ticker:"PLTR",name:"Palantir",sector:"AI/Defense",current:152,target:195,analysts:20,rating:"Moderate Buy",tier:3,risk:"Medium",note:"Government AI contracts, Iran conflict beneficiary",source:"TipRanks avg"},
+];
+
+const TC={
+  1:{color:"#ff1744",dim:"rgba(255,23,68,0.1)",label:"🚀 MOONSHOTS",desc:"Biotech, quantum, early-stage AI. Huge upside but binary risk. 1-3% max allocation."},
+  2:{color:"#ff9100",dim:"rgba(255,145,0,0.1)",label:"⚡ HIGH CONVICTION",desc:"Beaten-down quality names with strong analyst backing. 5-10% allocation."},
+  3:{color:"#00e676",dim:"rgba(0,230,118,0.1)",label:"📈 SOLID UPSIDE",desc:"Large-cap, proven businesses. Core portfolio material. 10-25% allocation."},
+};
+const RI={Extreme:"🔴",High:"🟠",Medium:"🟡"};
+const up=s=>((s.target-s.current)/s.current*100);
+const fmt=n=>n>=100?"$"+n.toLocaleString():"$"+n;
+
+function App(){
+  const[tf,setTf]=useState("all");
+  const[sb,setSb]=useState("upside");
+  const[hov,setHov]=useState(null);
+  const[srch,setSrch]=useState("");
+  const[exp,setExp]=useState(null);
+
+  const list=useMemo(()=>{
+    let l=[...ALL_STOCKS];
+    if(tf!=="all")l=l.filter(s=>s.tier===parseInt(tf));
+    if(srch.trim()){const q=srch.trim().toLowerCase();l=l.filter(s=>s.ticker.toLowerCase().includes(q)||s.name.toLowerCase().includes(q)||s.sector.toLowerCase().includes(q));}
+    if(sb==="upside")l.sort((a,b)=>up(b)-up(a));
+    else if(sb==="analysts")l.sort((a,b)=>b.analysts-a.analysts);
+    else l.sort((a,b)=>a.tier-b.tier||up(b)-up(a));
+    return l;
+  },[tf,sb,srch]);
+
+  const maxUp=Math.max(...list.map(up),1);
+  const avgUp=ALL_STOCKS.reduce((a,s)=>a+up(s),0)/ALL_STOCKS.length;
+  const top=[...ALL_STOCKS].sort((a,b)=>up(b)-up(a))[0];
+
+  return(
+    <div style={{background:"#030810",minHeight:"100vh",fontFamily:"'Courier New',monospace",color:"#c8d8e8",padding:"24px 16px 60px",maxWidth:900,margin:"0 auto"}}>
+
+      {/* Header */}
+      <div style={{marginBottom:28,animation:"fadeUp 0.4s ease"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+          <div style={{width:7,height:7,borderRadius:"50%",background:"#00e676",boxShadow:"0 0 10px #00e676",animation:"pulse 2s infinite"}}/>
+          <span style={{fontSize:9,color:"#00e676",letterSpacing:"0.2em"}}>LIVE ANALYST SCAN · 25 MAR 2026</span>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+          <h1 style={{fontSize:"clamp(20px,5vw,34px)",fontWeight:900,margin:"0 0 6px",color:"#fff",letterSpacing:"-0.02em",lineHeight:1.1}}>
+            HIGHEST ANALYST UPSIDE<br/>
+            <span style={{color:"#00e676"}}>ACROSS ALL MARKETS</span>
+          </h1>
+          <a href="/" style={{fontSize:9,color:"#1a3040",letterSpacing:"0.1em",textDecoration:"none",border:"1px solid #0d1e2d",padding:"5px 10px",borderRadius:8,fontFamily:"'Courier New',monospace",flexShrink:0,marginTop:4}}>← AP'S INVESTMENTS</a>
+        </div>
+        <p style={{color:"#1a3040",fontSize:10,margin:0,letterSpacing:"0.1em"}}>{ALL_STOCKS.length} STOCKS · RANKED BY % GAP TO CONSENSUS TARGET</p>
+      </div>
+
+      {/* Stat chips */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
+        {[
+          {label:"#1 UPSIDE",val:`+${up(top).toFixed(0)}%`,sub:top.ticker,col:"#ff1744"},
+          {label:"AVG UPSIDE",val:`+${avgUp.toFixed(0)}%`,sub:`${ALL_STOCKS.length} stocks`,col:"#ff9100"},
+          {label:"STRONG BUY",val:ALL_STOCKS.filter(s=>s.rating==="Strong Buy").length,sub:"analyst consensus",col:"#00e676"},
+        ].map(c=>(
+          <div key={c.label} style={{background:"#070f1a",border:`1px solid ${c.col}22`,borderRadius:10,padding:"12px 10px"}}>
+            <div style={{fontSize:8,color:"#1a3040",letterSpacing:"0.15em",marginBottom:4}}>{c.label}</div>
+            <div style={{fontSize:22,fontWeight:900,color:c.col,lineHeight:1}}>{c.val}</div>
+            <div style={{fontSize:9,color:"#1a3040",marginTop:3}}>{c.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        {[["all","#c8d8e8","ALL"],["1","#ff1744","🚀 MOONSHOTS"],["2","#ff9100","⚡ HIGH CONVICTION"],["3","#00e676","📈 SOLID UPSIDE"]].map(([key,col,label])=>(
+          <button key={key} className="filter-btn" onClick={()=>setTf(key)} style={{padding:"6px 12px",borderRadius:20,border:`1px solid ${tf===key?col:"#0d1e2d"}`,background:tf===key?col+"22":"transparent",color:tf===key?col:"#1a3040",fontSize:9,cursor:"pointer",letterSpacing:"0.1em",fontFamily:"inherit",fontWeight:700}}>{label}</button>
+        ))}
+        <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+          <select value={sb} onChange={e=>setSb(e.target.value)} style={{background:"#070f1a",border:"1px solid #0d1e2d",color:"#2a4050",fontSize:9,padding:"5px 8px",borderRadius:6,fontFamily:"inherit",cursor:"pointer"}}>
+            <option value="upside">SORT: UPSIDE</option>
+            <option value="analysts">SORT: ANALYSTS</option>
+            <option value="tier">SORT: TIER</option>
+          </select>
+          <input value={srch} onChange={e=>setSrch(e.target.value)} placeholder="SEARCH..." style={{background:"#070f1a",border:"1px solid #0d1e2d",color:"#5a7080",fontSize:9,padding:"5px 8px",borderRadius:6,fontFamily:"inherit",width:90}}/>
+        </div>
+      </div>
+
+      {/* Bar chart */}
+      <div style={{background:"#070f1a",border:"1px solid #0d1e2d",borderRadius:12,padding:"18px 14px",marginBottom:16}}>
+        <p style={{fontSize:8,color:"#1a3040",letterSpacing:"0.2em",margin:"0 0 16px"}}>UPSIDE TO CONSENSUS TARGET %</p>
+        {list.map((s,i)=>{
+          const u=up(s),col=TC[s.tier].color,pct=(u/maxUp)*100;
+          return(
+            <div key={s.ticker} onMouseEnter={()=>setHov(s.ticker)} onMouseLeave={()=>setHov(null)} onClick={()=>setExp(exp===s.ticker?null:s.ticker)}
+              style={{display:"flex",alignItems:"center",marginBottom:8,cursor:"pointer",gap:6}}>
+              <span style={{width:16,fontSize:8,color:"#0d1e2d",flexShrink:0}}>{i+1}</span>
+              <span style={{width:42,fontSize:11,fontWeight:700,color:col,flexShrink:0}}>{s.ticker}</span>
+              <div style={{flex:1,background:"#0a1825",borderRadius:3,height:20,position:"relative",overflow:"hidden"}}>
+                <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${col}22,${col}bb)`,borderRadius:3,transition:"width 0.5s ease",boxShadow:hov===s.ticker?`0 0 10px ${col}55`:"none"}}/>
+                {hov===s.ticker&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",paddingLeft:8,fontSize:9,color:"#fff",fontWeight:700,whiteSpace:"nowrap",overflow:"hidden"}}>{s.note} · {s.source}</div>}
+              </div>
+              <span style={{width:52,textAlign:"right",fontSize:12,fontWeight:900,color:col,flexShrink:0}}>+{u.toFixed(1)}%</span>
+            </div>
+          );
+        })}
+        {list.length===0&&<div style={{color:"#1a3040",fontSize:11,textAlign:"center",padding:20}}>No results.</div>}
+      </div>
+
+      {/* Table */}
+      <div style={{background:"#070f1a",border:"1px solid #0d1e2d",borderRadius:12,overflow:"hidden",marginBottom:16}}>
+        <div style={{display:"grid",gridTemplateColumns:"20px 1fr 1fr 70px 90px 60px",gap:8,padding:"8px 14px",background:"#060d18",borderBottom:"1px solid #0d1e2d"}}>
+          {["#","TICKER","PRICE → TARGET","UPSIDE","RATING","ANALYSTS"].map(h=>(
+            <span key={h} style={{fontSize:7.5,color:"#1a3040",letterSpacing:"0.1em",fontWeight:700}}>{h}</span>
+          ))}
+        </div>
+        {list.map((s,i)=>{
+          const u=up(s),col=TC[s.tier].color,isExp=exp===s.ticker;
+          return(
+            <div key={s.ticker}>
+              <div className="row" onClick={()=>setExp(isExp?null:s.ticker)}
+                style={{display:"grid",gridTemplateColumns:"20px 1fr 1fr 70px 90px 60px",gap:8,padding:"11px 14px",borderBottom:i<list.length-1?"1px solid #080f18":"none",background:i%2===0?"transparent":"#050c15",cursor:"pointer",transition:"background 0.15s"}}>
+                <span style={{fontSize:9,color:"#0d1e2d",alignSelf:"center"}}>{i+1}</span>
+                <div style={{alignSelf:"center"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
+                    <div style={{width:3,height:14,borderRadius:2,background:col,flexShrink:0}}/>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:col}}>{s.ticker}</div>
+                      <div style={{fontSize:8,color:"#1a3040"}}>{s.sector}</div>
+                    </div>
+                  </div>
+                </div>
+                <div style={{alignSelf:"center"}}>
+                  <span style={{fontSize:10,color:"#3a5060"}}>{fmt(s.current)}</span>
+                  <span style={{fontSize:9,color:"#0d1e2d",margin:"0 3px"}}>→</span>
+                  <span style={{fontSize:10,color:"#6a8090",fontWeight:600}}>{fmt(s.target)}</span>
+                </div>
+                <span style={{fontSize:14,fontWeight:900,color:col,alignSelf:"center"}}>+{u.toFixed(1)}%</span>
+                <span style={{fontSize:9,color:s.rating==="Strong Buy"?"#00e676":s.rating==="Buy"?"#ff9100":"#5a7080",fontWeight:700,alignSelf:"center"}}>{s.rating}</span>
+                <span style={{fontSize:10,color:"#1a3040",alignSelf:"center"}}>{s.analysts}</span>
+              </div>
+              {isExp&&(
+                <div style={{padding:"12px 14px 14px 34px",background:TC[s.tier].dim,borderBottom:i<list.length-1?"1px solid #080f18":"none",animation:"fadeUp 0.2s ease"}}>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+                    <span style={{fontSize:9,background:TC[s.tier].dim,border:`1px solid ${col}33`,color:col,padding:"3px 8px",borderRadius:20,fontWeight:700}}>{TC[s.tier].label}</span>
+                    <span style={{fontSize:9,color:"#2a4050",padding:"3px 8px",background:"#070f1a",border:"1px solid #0d1e2d",borderRadius:20}}>{RI[s.risk]} {s.risk} Risk</span>
+                    <span style={{fontSize:9,color:"#2a4050",padding:"3px 8px",background:"#070f1a",border:"1px solid #0d1e2d",borderRadius:20}}>Source: {s.source}</span>
+                  </div>
+                  <div style={{fontSize:11,color:"#4a6070",lineHeight:1.6,marginBottom:10}}>{s.note}</div>
+                  <div style={{display:"flex",gap:20}}>
+                    {[{l:"Current",v:fmt(s.current),c:"#3a5060"},{l:"Target",v:fmt(s.target),c:col},{l:"Upside",v:`+${u.toFixed(1)}%`,c:col}].map(st=>(
+                      <div key={st.l}>
+                        <div style={{fontSize:8,color:"#1a3040",letterSpacing:"0.1em",marginBottom:2}}>{st.l}</div>
+                        <div style={{fontSize:16,fontWeight:900,color:st.c}}>{st.v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Tier key */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
+        {[1,2,3].map(t=>(
+          <div key={t} style={{background:"#070f1a",border:`1px solid ${TC[t].color}22`,borderRadius:10,padding:"12px 10px"}}>
+            <div style={{fontSize:10,fontWeight:700,color:TC[t].color,marginBottom:5}}>{TC[t].label}</div>
+            <div style={{fontSize:9,color:"#1a3040",lineHeight:1.6}}>{TC[t].desc}</div>
+          </div>
+        ))}
+      </div>
+
+      <p style={{fontSize:8,color:"#0a1520",textAlign:"center",letterSpacing:"0.1em"}}>
+        CLICK ROW FOR DETAILS · HOVER BARS FOR NOTES · NOT FINANCIAL ADVICE
+      </p>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
