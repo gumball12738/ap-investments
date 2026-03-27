@@ -31,16 +31,29 @@ export default async function handler(req, res) {
 
   const { type } = req.query;
 
-  // GET quote → live prices for banner
+  // GET quote → live prices for banner (using v8 chart for reliability)
   if (type === 'quote') {
     try {
-      const syms = req.query.symbols || '^GSPC,^IXIC,EQGB.L,VUAG.L,SEMI.L,VWRP.L,JREM.L';
-      const r = await fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(syms)}`, { headers: H });
-      const d = await r.json();
-      return res.status(200).json((d.quoteResponse?.result || []).map(q => ({
-        symbol: q.symbol, name: q.shortName || q.symbol,
-        price: q.regularMarketPrice, changePct: q.regularMarketChangePercent, currency: q.currency
-      })));
+      const syms = (req.query.symbols || '^GSPC,^IXIC,EQGB.L,VUAG.L,SEMI.L,VWRP.L,JREM.L').split(',').map(s => s.trim());
+      const results = await Promise.all(syms.map(async sym => {
+        try {
+          const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`, { headers: H });
+          if (!r.ok) return null;
+          const d = await r.json();
+          const meta = d?.chart?.result?.[0]?.meta;
+          if (!meta) return null;
+          return {
+            symbol: sym,
+            name: meta.longName || meta.shortName || sym,
+            price: meta.regularMarketPrice,
+            changePct: meta.regularMarketPrice && meta.previousClose
+              ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose * 100)
+              : null,
+            currency: meta.currency
+          };
+        } catch { return null; }
+      }));
+      return res.status(200).json(results.filter(Boolean));
     } catch (e) { return res.status(500).json({ error: e.message }); }
   }
 
